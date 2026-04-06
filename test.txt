@@ -1,0 +1,37 @@
+BeginProject ExempleUSTHB;
+
+Setup:
+    %% Déclarations des variables simples
+    define i | j : integer;
+    define moyenne : float = 12.5;
+    
+    %% Déclaration d'un tableau
+    define notes : [float; 10];
+    
+    %% Déclaration d'une constante
+    const Seuil : integer = 10;
+
+Run:
+{
+    //* Test de la boucle FOR et de l'affectation *//
+    for i in 1 to 10 {
+        in(j);
+        notes[i-1] <- j * 1.5;
+    } endfor;
+
+    //* Test de la structure IF et des opérateurs logiques *//
+    if (moyenne >= Seuil AND Seuil > 0) then:
+    {
+        out("Admis avec moyenne: ", moyenne);
+    } else {
+        out("Ajourne");
+    } endIf;
+
+    //* Test de la boucle WHILE *//
+    i <- 0;
+    loop while (i < 5) {
+        moyenne <- moyenne + 1.0;
+        i <- i + 1;
+    } endloop;
+}
+EndProject;

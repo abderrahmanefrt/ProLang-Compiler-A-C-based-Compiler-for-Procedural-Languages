@@ -1,0 +1,183 @@
+#include "quad.h"
+#include "ts.h"
+
+Quad quads[1000];
+int  qc      = 0;
+int  cptTemp = 0;
+
+ExprInfo *creer_expr(const char *type, int isConst, int isInt,
+                     int ival, float fval, const char *place)
+{
+    ExprInfo *e = (ExprInfo *)malloc(sizeof(ExprInfo));
+    if (e == NULL) { fprintf(stderr, "Erreur memoire.\n"); exit(1); }
+    strcpy(e->type, type);
+    e->isConst = isConst;
+    e->isInt   = isInt;
+    e->ival    = ival;
+    e->fval    = fval;
+    if (place != NULL) {
+        strncpy(e->place, place, 63);
+        e->place[63] = '\0';
+    } else {
+        e->place[0] = '\0';
+    }
+    return e;
+}
+
+void liberer_expr(ExprInfo *e)
+{
+    if (e != NULL) free(e);
+}
+
+void ajouterQuad(const char *op, const char *arg1,
+                 const char *arg2, const char *res)
+{
+    if (qc >= 1000) {
+        fprintf(stderr, "Erreur : depassement quadruplets.\n");
+        exit(1);
+    }
+    strncpy(quads[qc].op,   op   ? op   : "", 15); quads[qc].op[15]   = '\0';
+    strncpy(quads[qc].arg1, arg1 ? arg1 : "", 63); quads[qc].arg1[63] = '\0';
+    strncpy(quads[qc].arg2, arg2 ? arg2 : "", 63); quads[qc].arg2[63] = '\0';
+    strncpy(quads[qc].res,  res  ? res  : "", 63); quads[qc].res[63]  = '\0';
+    qc++;
+}
+
+void nouveauTemp(char *buf)
+{
+    sprintf(buf, "T%d", ++cptTemp);
+}
+
+
+
+ExprInfo *expr_arith(ExprInfo *a, ExprInfo *b, char op)
+{
+    ExprInfo *r;
+    char opstr[4], temp[32];
+    float av, bv, fv;
+    int   iv;
+
+    if (a == NULL || b == NULL) {
+        liberer_expr(a); liberer_expr(b);
+        return creer_expr("", 0, 0, 0, 0.0f, "");
+    }
+
+    nouveauTemp(temp);
+    opstr[0] = op; opstr[1] = '\0';
+    ajouterQuad(opstr, a->place, b->place, temp);
+
+    if (op == '/' || strcmp(a->type,"float")==0 || strcmp(b->type,"float")==0) {
+        r = creer_expr("float", 0, 0, 0, 0.0f, temp);
+        if (a->isConst && b->isConst) {
+            av = a->isInt ? (float)a->ival : a->fval;
+            bv = b->isInt ? (float)b->ival : b->fval;
+            fv = 0.0f;
+            if (op == '+') fv = av + bv;
+            if (op == '-') fv = av - bv;
+            if (op == '*') fv = av * bv;
+            if (op == '/') fv = av / bv;
+            r->isConst = 1; r->isInt = 0; r->fval = fv;
+        }
+    } else {
+        r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+        if (a->isConst && b->isConst) {
+            iv = 0;
+            if (op == '+') iv = a->ival + b->ival;
+            if (op == '-') iv = a->ival - b->ival;
+            if (op == '*') iv = a->ival * b->ival;
+            r->isConst = 1; r->isInt = 1; r->ival = iv;
+        }
+    }
+
+    liberer_expr(a); liberer_expr(b);
+    return r;
+}
+
+ExprInfo *expr_comp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
+{
+    ExprInfo *r;
+    char temp[32];
+    float av, bv;
+    int   ok;
+
+    if (a == NULL || b == NULL) {
+        liberer_expr(a); liberer_expr(b);
+        return creer_expr("integer", 0, 1, 0, 0.0f, "");
+    }
+
+    nouveauTemp(temp);
+    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+
+    if (a->isConst && b->isConst) {
+        av = a->isInt ? (float)a->ival : a->fval;
+        bv = b->isInt ? (float)b->ival : b->fval;
+        ok = 0;
+        if (code == 1) ok = (av <  bv);
+        if (code == 2) ok = (av >  bv);
+        if (code == 3) ok = (av <= bv);
+        if (code == 4) ok = (av >= bv);
+        if (code == 5) ok = (av == bv);
+        if (code == 6) ok = (av != bv);
+        r->isConst = 1; r->isInt = 1; r->ival = ok ? 1 : 0;
+    }
+
+    liberer_expr(a); liberer_expr(b);
+    return r;
+}
+
+ExprInfo *expr_logique(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
+{
+    ExprInfo *r;
+    char temp[32];
+    int  ok;
+
+    if (a == NULL || b == NULL) {
+        liberer_expr(a); liberer_expr(b);
+        return creer_expr("integer", 0, 1, 0, 0.0f, "");
+    }
+
+    nouveauTemp(temp);
+    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+
+    if (a->isConst && b->isConst) {
+        ok = 0;
+        if (code == 1) ok = ((a->ival != 0) && (b->ival != 0));
+        if (code == 2) ok = ((a->ival != 0) || (b->ival != 0));
+        r->isConst = 1; r->isInt = 1; r->ival = ok ? 1 : 0;
+    }
+
+    liberer_expr(a); liberer_expr(b);
+    return r;
+}
+
+ExprInfo *expr_non(ExprInfo *a)
+{
+    ExprInfo *r;
+    char temp[32];
+
+    if (a == NULL) return creer_expr("integer", 0, 1, 0, 0.0f, "");
+
+    nouveauTemp(temp);
+    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+
+    if (a->isConst) {
+        r->isConst = 1; r->isInt = 1;
+        r->ival = (a->ival == 0) ? 1 : 0;
+    }
+
+    liberer_expr(a);
+    return r;
+}
+
+void debut_if(ExprInfo *cond)        { (void)cond; }
+void partie_else(void)               { }
+void fin_if_sans_else(void)          { }
+void fin_if_avec_else(void)          { }
+
+void debut_while(void)               { }
+void condition_while(ExprInfo *cond) { (void)cond; }
+void fin_while(void)                 { }
+
+void debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
+{ (void)var; (void)init; (void)lim; }
+void fin_for(void) { }
