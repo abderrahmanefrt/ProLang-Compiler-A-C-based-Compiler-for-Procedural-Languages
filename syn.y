@@ -442,7 +442,7 @@ EXPR
           char place[64];
           verifierVariableSimple($1);
           strncpy(place, $1, 63); place[63] = '\0';
-          $$ = (void *)creerExpr(getType($1), place, 0, 0, 0, 0.0f);
+          $$ = (void *)creerExpr(getType($1), place, "BZ", 0, 0, 0, 0.0f);
           free($1);
       }
     | idf '[' EXPR ']'
@@ -451,7 +451,7 @@ EXPR
           verifierTableauIndice($1, (ExprInfo *)$3);
           nouveauTemp(temp);
           ajouterQuad("READTAB", $1, ((ExprInfo *)$3)->place, temp);
-          $$ = (void *)creerExpr(getType($1), temp, 0, 0, 0, 0.0f);
+          $$ = (void *)creerExpr(getType($1), temp, "BZ", 0, 0, 0, 0.0f);
           free($1);
           libererExpr((ExprInfo *)$3);
       }
@@ -459,13 +459,13 @@ EXPR
       {
           char place[64];
           sprintf(place, "%d", $1);
-          $$ = (void *)creerExpr("integer", place, 1, 1, $1, (float)$1);
+          $$ = (void *)creerExpr("integer", place, "BZ", 1, 1, $1, (float)$1);
       }
     | cst_reel
       {
           char place[64];
           sprintf(place, "%g", (double)$1);
-          $$ = (void *)creerExpr("float", place, 1, 0, 0, $1);
+          $$ = (void *)creerExpr("float", place, "BZ", 1, 0, 0, $1);
       }
     ;
 
@@ -474,13 +474,13 @@ VALEUR_LITTERALE
       {
           char place[64];
           sprintf(place, "%d", $1);
-          $$ = (void *)creerExpr("integer", place, 1, 1, $1, (float)$1);
+          $$ = (void *)creerExpr("integer", place, "BZ", 1, 1, $1, (float)$1);
       }
     | cst_reel
       {
           char place[64];
           sprintf(place, "%g", (double)$1);
-          $$ = (void *)creerExpr("float", place, 1, 0, 0, $1);
+          $$ = (void *)creerExpr("float", place, "BZ", 1, 0, 0, $1);
       }
     ;
 
