@@ -1,6 +1,7 @@
 %{
 #include "ts.h"
 #include "quad.h"
+#include "optim.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,7 +134,7 @@ static void verifierTableauIndice(const char *nom, ExprInfo *idx)
 S
     : mc_beginproject idf ';' mc_setup ':' DECLARATIONS mc_run ':' '{' INSTRUCTIONS '}' mc_endproject ';'
       {
-          ajouterQuad("HALT", "vide", "vide", "vide");
+          ajouterQuad("Fin", "vide", "vide", "vide");
           free($2);
           printf("Analyse syntaxique et semantique reussie.\n");
           YYACCEPT;
@@ -497,6 +498,8 @@ int main(void)
     int r = yyparse();
     if (r == 0) {
         afficherQuads();
+        optimiser();
+        afficherQuadsOptimises();
         afficher();
     }
     liberer();

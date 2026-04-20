@@ -83,17 +83,18 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 111 "syn.y"
+#line 102 "syn.y"
 
     int   entier;
     float reel;
     char *str;
     void *expr;
+    int   idx;   /* indice de quadruplet pour backpatching */
 
 
 
 /* Line 1676 of yacc.c  */
-#line 97 "syn.tab.h"
+#line 98 "syn.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

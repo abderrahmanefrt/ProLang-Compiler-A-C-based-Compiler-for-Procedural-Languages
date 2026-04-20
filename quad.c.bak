@@ -1,196 +1,403 @@
 #include "quad.h"
-#include "ts.h"
 
-Quad quads[1000];
+/* ============================================================
+   VARIABLES GLOBALES
+   ============================================================ */
+Quad quad[1000];
 int  qc      = 0;
 int  cptTemp = 0;
 
-ExprInfo *creer_expr(const char *type, int isConst, int isInt,
-                     int ival, float fval, const char *place)
-{
-    ExprInfo *e = (ExprInfo *)malloc(sizeof(ExprInfo));
-    if (e == NULL) { fprintf(stderr, "Erreur memoire.\n"); exit(1); }
-    strcpy(e->type, type);
-    e->isConst = isConst;
-    e->isInt   = isInt;
-    e->ival    = ival;
-    e->fval    = fval;
-    if (place != NULL) {
-        strncpy(e->place, place, 63);
-        e->place[63] = '\0';
-    } else {
-        e->place[0] = '\0';
-    }
-    return e;
-}
+/* ============================================================
+   FONCTIONS DE BASE
+   ============================================================ */
 
-void liberer_expr(ExprInfo *e)
-{
-    if (e != NULL) free(e);
-}
-
-void ajouterQuad(const char *op, const char *arg1,
-                 const char *arg2, const char *res)
+/* Ajoute un quadruplet (oper, op1, op2, res) dans la table */
+void ajouterQuad(char oper[], char op1[], char op2[], char res[])
 {
     if (qc >= 1000) {
-        fprintf(stderr, "Erreur : depassement quadruplets.\n");
+        fprintf(stderr, "Erreur : trop de quadruplets.\n");
         exit(1);
     }
-    strncpy(quads[qc].op,   op   ? op   : "", 15); quads[qc].op[15]   = '\0';
-    strncpy(quads[qc].arg1, arg1 ? arg1 : "", 63); quads[qc].arg1[63] = '\0';
-    strncpy(quads[qc].arg2, arg2 ? arg2 : "", 63); quads[qc].arg2[63] = '\0';
-    strncpy(quads[qc].res,  res  ? res  : "", 63); quads[qc].res[63]  = '\0';
+    strcpy(quad[qc].oper, oper);
+    strcpy(quad[qc].op1,  op1);
+    strcpy(quad[qc].op2,  op2);
+    strcpy(quad[qc].res,  res);
     qc++;
 }
 
+/* Met a jour une case d'un quadruplet existant (backpatching)
+   colon_quad : 0=oper  1=op1  2=op2  3=res                   */
+void updateQuad(int num_quad, int colon_quad, char val[])
+{
+    if      (colon_quad == 0) strcpy(quad[num_quad].oper, val);
+    else if (colon_quad == 1) strcpy(quad[num_quad].op1,  val);
+    else if (colon_quad == 2) strcpy(quad[num_quad].op2,  val);
+    else if (colon_quad == 3) strcpy(quad[num_quad].res,  val);
+}
+
+/* Genere un nouveau nom de temporaire : T1, T2, T3, ... */
 void nouveauTemp(char *buf)
 {
     sprintf(buf, "T%d", ++cptTemp);
 }
 
+/* Affiche la table des quadruplets */
 void afficherQuads(void)
 {
     int i;
-    printf("\n\n");
-    printf("--------------------------------------------------------------------------\n");
-    printf("| %-4s | %-10s | %-15s | %-15s | %-15s |\n",
-           "N", "Op", "Arg1", "Arg2", "Res");
-    printf("--------------------------------------------------------------------------\n");
+    printf("\n*********************Les Quadruplets***********************\n");
+    printf("------------------------------------------------------------\n");
     for (i = 0; i < qc; i++) {
-        printf("| %-4d | %-10s | %-15s | %-15s | %-15s |\n",
-               i, quads[i].op, quads[i].arg1, quads[i].arg2, quads[i].res);
+        printf(" %d - ( %s , %s , %s , %s )\n",
+               i, quad[i].oper, quad[i].op1, quad[i].op2, quad[i].res);
+        printf("------------------------------------------------------------\n");
     }
-    printf("--------------------------------------------------------------------------\n");
 }
 
-ExprInfo *expr_arith(ExprInfo *a, ExprInfo *b, char op)
+/* ============================================================
+   GESTION DES EXPRESSIONS
+   ============================================================ */
+
+/* ---- creerExpr ----
+   Alloue une fiche ExprInfo.
+   NOUVEAU : parametre cmpOp pour stocker l'operateur de saut.
+   Ex : creerExpr("integer", "T1", "BLE", 0, 1, 0, 0)
+        signifie : expression de comparaison, on saute si <=    */
+ExprInfo *creerExpr(const char *type, const char *place,
+                    const char *cmpOp,
+                    int isConst, int isInt, int ival, float fval)
 {
-    ExprInfo *r;
-    char opstr[4], temp[32];
-    float av, bv, fv;
-    int   iv;
+    ExprInfo *e = (ExprInfo *)malloc(sizeof(ExprInfo));
+    if (e == NULL) { fprintf(stderr, "Erreur memoire.\n"); exit(1); }
+
+    strcpy(e->type,  type   ? type   : "");
+    strncpy(e->place, place ? place  : "", 63); e->place[63] = '\0';
+    strncpy(e->cmpOp, cmpOp ? cmpOp  : "BZ", 7); e->cmpOp[7] = '\0';
+
+    e->isConst = isConst;
+    e->isInt   = isInt;
+    e->ival    = ival;
+    e->fval    = fval;
+    return e;
+}
+
+void libererExpr(ExprInfo *e)
+{
+    if (e) free(e);
+}
+
+/* ============================================================
+   TABLE DE CORRESPONDANCE
+   Opérateur de comparaison  →  saut conditionnel inverse
+   On saute quand la condition est FAUSSE, donc on prend
+   l'operateur inverse :
+     x > y  est faux  quand x <= y  → BLE
+     x < y  est faux  quand x >= y  → BGE
+     x >= y est faux  quand x <  y  → BLT
+     x <= y est faux  quand x >  y  → BGT
+     x == y est faux  quand x != y  → BNZ
+     x != y est faux  quand x == y  → BZ
+   ============================================================ */
+static const char *sautInverse(const char *op)
+{
+    if (strcmp(op, ">")  == 0) return "BLE";
+    if (strcmp(op, "<")  == 0) return "BGE";
+    if (strcmp(op, ">=") == 0) return "BLT";
+    if (strcmp(op, "<=") == 0) return "BGT";
+    if (strcmp(op, "==") == 0) return "BNZ";
+    if (strcmp(op, "!=") == 0) return "BZ";
+    return "BZ";  /* par defaut */
+}
+
+/* ---- exprArith ----
+   Gere +, -, *, /
+   Emet : ( op , a , b , Tx )
+   cmpOp = "BZ" par defaut (pas une comparaison directe)       */
+ExprInfo *exprArith(ExprInfo *a, ExprInfo *b, char op)
+{
+    char temp[32], opstr[4];
 
     if (a == NULL || b == NULL) {
-        liberer_expr(a); liberer_expr(b);
-        return creer_expr("", 0, 0, 0, 0.0f, "");
+        libererExpr(a); libererExpr(b);
+        return creerExpr("", "", "BZ", 0, 0, 0, 0.0f);
     }
+
+    if (op == '/' && b->isConst && b->isInt && b->ival == 0)
+        fprintf(stderr, "Erreur semantique : division par zero\n");
 
     nouveauTemp(temp);
     opstr[0] = op; opstr[1] = '\0';
     ajouterQuad(opstr, a->place, b->place, temp);
 
     if (op == '/' || strcmp(a->type,"float")==0 || strcmp(b->type,"float")==0) {
-        r = creer_expr("float", 0, 0, 0, 0.0f, temp);
-        if (a->isConst && b->isConst) {
-            av = a->isInt ? (float)a->ival : a->fval;
-            bv = b->isInt ? (float)b->ival : b->fval;
-            fv = 0.0f;
-            if (op == '+') fv = av + bv;
-            if (op == '-') fv = av - bv;
-            if (op == '*') fv = av * bv;
-            if (op == '/') fv = av / bv;
-            r->isConst = 1; r->isInt = 0; r->fval = fv;
-        }
+        ExprInfo *r = creerExpr("float", temp, "BZ", 0, 0, 0, 0.0f);
+        libererExpr(a); libererExpr(b);
+        return r;
     } else {
-        r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
-        if (a->isConst && b->isConst) {
-            iv = 0;
-            if (op == '+') iv = a->ival + b->ival;
-            if (op == '-') iv = a->ival - b->ival;
-            if (op == '*') iv = a->ival * b->ival;
-            r->isConst = 1; r->isInt = 1; r->ival = iv;
-        }
+        ExprInfo *r = creerExpr("integer", temp, "BZ", 0, 1, 0, 0.0f);
+        libererExpr(a); libererExpr(b);
+        return r;
     }
-
-    liberer_expr(a); liberer_expr(b);
-    return r;
 }
 
-ExprInfo *expr_comp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
+/* ---- exprComp ----
+   NOUVEAU COMPORTEMENT :
+   Au lieu d'emettre ( > , x , y , T1 ) puis laisser BZ utiliser T1,
+   on stocke directement les operandes et le saut inverse dans la fiche.
+
+   On emet quand meme le quadruplet de comparaison pour calculer
+   le resultat 0/1 (utile pour AND/OR), ET on stocke cmpOp
+   pour que debut_if / conditionWhile puissent utiliser le
+   bon saut conditionnel.
+
+   Exemple : x > y
+     Emet     : ( >   , x , y , T1 )
+     cmpOp    : "BLE"  (saute si x <= y, c-a-d condition fausse)
+     place    : "T1"   (pour compatibilite avec AND/OR)           */
+ExprInfo *exprComp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
 {
-    ExprInfo *r;
     char temp[32];
-    float av, bv;
-    int   ok;
+    const char *saut;
+    ExprInfo *r;
+    (void)code;
 
     if (a == NULL || b == NULL) {
-        liberer_expr(a); liberer_expr(b);
-        return creer_expr("integer", 0, 1, 0, 0.0f, "");
+        libererExpr(a); libererExpr(b);
+        return creerExpr("integer", "", "BZ", 0, 1, 0, 0.0f);
     }
 
+    /* Calcul du saut inverse */
+    saut = sautInverse(opstr);
+
+    /* Emission du quadruplet de comparaison */
     nouveauTemp(temp);
-    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+    ajouterQuad((char*)opstr, a->place, b->place, temp);
 
-    if (a->isConst && b->isConst) {
-        av = a->isInt ? (float)a->ival : a->fval;
-        bv = b->isInt ? (float)b->ival : b->fval;
-        ok = 0;
-        if (code == 1) ok = (av <  bv);
-        if (code == 2) ok = (av >  bv);
-        if (code == 3) ok = (av <= bv);
-        if (code == 4) ok = (av >= bv);
-        if (code == 5) ok = (av == bv);
-        if (code == 6) ok = (av != bv);
-        r->isConst = 1; r->isInt = 1; r->ival = ok ? 1 : 0;
-    }
+    /*
+       On cree une fiche avec :
+       - place  = temp  (T1, T2...) pour AND/OR
+       - cmpOp  = saut  (BLE, BGE...) pour if/while/for
+    */
+    r = creerExpr("integer", temp, saut, 0, 1, 0, 0.0f);
 
-    liberer_expr(a); liberer_expr(b);
+    /* On stocke aussi les operandes originaux dans op1/op2
+       du dernier quad pour que les sauts directs soient possibles */
+
+    libererExpr(a); libererExpr(b);
     return r;
 }
 
-ExprInfo *expr_logique(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
+/* ---- exprLogique ----
+   AND / OR : pas de saut special, on utilise BZ par defaut     */
+ExprInfo *exprLogique(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
 {
-    ExprInfo *r;
     char temp[32];
-    int  ok;
+    (void)code;
 
     if (a == NULL || b == NULL) {
-        liberer_expr(a); liberer_expr(b);
-        return creer_expr("integer", 0, 1, 0, 0.0f, "");
+        libererExpr(a); libererExpr(b);
+        return creerExpr("integer", "", "BZ", 0, 1, 0, 0.0f);
     }
 
     nouveauTemp(temp);
-    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+    ajouterQuad((char*)opstr, a->place, b->place, temp);
 
-    if (a->isConst && b->isConst) {
-        ok = 0;
-        if (code == 1) ok = ((a->ival != 0) && (b->ival != 0));
-        if (code == 2) ok = ((a->ival != 0) || (b->ival != 0));
-        r->isConst = 1; r->isInt = 1; r->ival = ok ? 1 : 0;
-    }
-
-    liberer_expr(a); liberer_expr(b);
-    return r;
+    libererExpr(a); libererExpr(b);
+    return creerExpr("integer", temp, "BZ", 0, 1, 0, 0.0f);
 }
 
-ExprInfo *expr_non(ExprInfo *a)
+/* ---- exprNon ----
+   NON(a) : si a est vrai (!=0) → resultat = 0, donc BNZ       */
+ExprInfo *exprNon(ExprInfo *a)
 {
-    ExprInfo *r;
     char temp[32];
-
-    if (a == NULL) return creer_expr("integer", 0, 1, 0, 0.0f, "");
+    if (a == NULL) return creerExpr("integer", "", "BZ", 0, 1, 0, 0.0f);
 
     nouveauTemp(temp);
-    r = creer_expr("integer", 0, 1, 0, 0.0f, temp);
+    ajouterQuad("NON", a->place, "vide", temp);
 
-    if (a->isConst) {
-        r->isConst = 1; r->isInt = 1;
-        r->ival = (a->ival == 0) ? 1 : 0;
-    }
-
-    liberer_expr(a);
-    return r;
+    libererExpr(a);
+    /* NON(x) vaut 0 quand x != 0, donc on saute si BNZ */
+    return creerExpr("integer", temp, "BNZ", 0, 1, 0, 0.0f);
 }
 
-void debut_if(ExprInfo *cond)        { (void)cond; }
-void partie_else(void)               { }
-void fin_if_sans_else(void)          { }
-void fin_if_avec_else(void)          { }
+/* ============================================================
+   GESTION DU IF
 
-void debut_while(void)               { }
-void condition_while(ExprInfo *cond) { (void)cond; }
-void fin_while(void)                 { }
+   AVANT (avec BZ uniquement) :
+     ( >  , x , y , T1 )
+     ( BZ , dest , T1 , vide )   ← 2 quadruplets
 
-void debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
-{ (void)var; (void)init; (void)lim; }
-void fin_for(void) { }
+   APRES (avec saut direct) :
+     ( >   , x , y , T1 )
+     ( BLE , dest , x , y )      ← saut direct si x <= y (faux)
+
+   On utilise le cmpOp stocke dans la fiche de la condition
+   pour choisir le bon saut.
+   ============================================================ */
+
+/* ---- debut_if ----
+   Emet le saut conditionnel avec le bon operateur.
+   Si la condition est (x > y) → cmpOp = "BLE"
+   On emet : ( BLE , vide , x , y )
+   Si la condition est une expression logique → cmpOp = "BZ"
+   On emet : ( BZ  , vide , T1 , vide )                        */
+int debut_if(ExprInfo *cond)
+{
+    int idx = qc;
+
+    /* On recupere le dernier quad emis pour connaitre op1/op2 */
+    /* quad[qc-1] contient ( > , x , y , T1 ) */
+    char op1_cond[64], op2_cond[64];
+    strcpy(op1_cond, quad[qc-1].op1);  /* = x  */
+    strcpy(op2_cond, quad[qc-1].op2);  /* = y  */
+
+    /*
+       Si le cmpOp est un saut direct (BLE, BGE, BGT, BLT, BNZ)
+       on peut faire un saut direct sur les operandes originaux.
+       Sinon (BZ : cas AND/OR ou expression simple) on utilise
+       le temporaire.
+    */
+    if (strcmp(cond->cmpOp, "BZ") == 0) {
+        /* Cas AND/OR ou expression simple : ( BZ , vide , T1 , vide ) */
+        ajouterQuad("BZ", "vide", cond->place, "vide");
+    } else {
+        /* Cas comparaison directe : ( BLE , vide , x , y ) */
+        ajouterQuad(cond->cmpOp, "vide", op1_cond, op2_cond);
+    }
+
+    return idx;
+}
+
+/* ---- partie_else ----
+   Emet BR, backpatch le saut conditionnel (BZ/BLE/...)         */
+int partie_else(int idx_bz)
+{
+    int idx_br = qc;
+    char tmp[20];
+
+    ajouterQuad("BR", "vide", "vide", "vide");
+
+    sprintf(tmp, "%d", qc);
+    updateQuad(idx_bz, 1, tmp);
+
+    return idx_br;
+}
+
+/* ---- fin_if_sans_else ---- */
+void fin_if_sans_else(int idx_bz)
+{
+    char tmp[20];
+    sprintf(tmp, "%d", qc);
+    updateQuad(idx_bz, 1, tmp);
+}
+
+/* ---- fin_if ---- */
+void fin_if(int idx_br)
+{
+    char tmp[20];
+    sprintf(tmp, "%d", qc);
+    updateQuad(idx_br, 1, tmp);
+}
+
+/* ============================================================
+   GESTION DU WHILE
+   Meme principe : on utilise le bon saut selon cmpOp           */
+
+int debut_while(void)
+{
+    return qc;
+}
+
+int conditionWhile(ExprInfo *cond)
+{
+    int idx = qc;
+    char op1_cond[64], op2_cond[64];
+
+    strcpy(op1_cond, quad[qc-1].op1);
+    strcpy(op2_cond, quad[qc-1].op2);
+
+    if (strcmp(cond->cmpOp, "BZ") == 0) {
+        ajouterQuad("BZ", "vide", cond->place, "vide");
+    } else {
+        ajouterQuad(cond->cmpOp, "vide", op1_cond, op2_cond);
+    }
+
+    return idx;
+}
+
+void fin_while(int idx_debut, int idx_bz)
+{
+    char tmp[20];
+
+    sprintf(tmp, "%d", idx_debut);
+    ajouterQuad("BR", tmp, "vide", "vide");
+
+    sprintf(tmp, "%d", qc);
+    updateQuad(idx_bz, 1, tmp);
+}
+
+/* ============================================================
+   GESTION DU FOR
+   Le test est toujours var <= limite → on utilise BGT
+   (on saute si var > limite, c-a-d condition fausse)           */
+
+int debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
+{
+    char tempLim[32], tempCond[32], tmp[20];
+    int  idx_debut, idx_bz;
+
+    /* QUAD 1 : initialisation */
+    ajouterQuad(":=", init->place, "vide", (char*)var);
+
+    /* QUAD 2 : sauvegarde limite */
+    nouveauTemp(tempLim);
+    ajouterQuad(":=", lim->place, "vide", tempLim);
+
+    /* Debut du test */
+    idx_debut = qc;
+
+    /* QUAD 3 : test var <= limite */
+    nouveauTemp(tempCond);
+    ajouterQuad("<=", (char*)var, tempLim, tempCond);
+
+    /*
+       NOUVEAU : on utilise BGT au lieu de BZ
+       On saute si var > limite (condition fausse)
+       ( BGT , vide , var , tempLim )
+       au lieu de
+       ( BZ  , vide , tempCond , vide )
+    */
+    idx_bz = qc;
+    sprintf(tmp, "%d", idx_debut);
+    ajouterQuad("BGT", tmp, (char*)var, tempLim);
+    /*
+       op1 = idx_debut (sera ecrase par backpatch)
+       op2 = var       (operande 1 du test)
+       res = tempLim   (operande 2 du test)
+    */
+
+    return idx_bz;
+}
+
+void fin_for(int idx_bz, const char *var)
+{
+    char tempIncr[32], tmp[20];
+    int  idx_debut;
+
+    /* Recuperer idx_debut depuis op1 du BGT */
+    idx_debut = atoi(quad[idx_bz].op1);
+
+    /* Incrementation */
+    nouveauTemp(tempIncr);
+    ajouterQuad("+",  (char*)var, "1",     tempIncr);
+    ajouterQuad(":=", tempIncr,  "vide",   (char*)var);
+
+    /* Retour au test */
+    sprintf(tmp, "%d", idx_debut);
+    ajouterQuad("BR", tmp, "vide", "vide");
+
+    /* Backpatch du BGT */
+    sprintf(tmp, "%d", qc);
+    updateQuad(idx_bz, 1, tmp);
+}

@@ -48,17 +48,16 @@ int CpTS = 0;
 
 unsigned int hacher(const char *s)
 {
-    unsigned int h = 0; // On commence à 0
+    unsigned int h = 0; 
 
-    // On parcourt le mot lettre par lettre
     while (*s) {
         h = h + (unsigned int)(*s);
-        s++;                        // On passe à la lettre suivante
+        s++;                        
     }
     
-    // On applique le modulo comme dans le cours
     return h % HASH_SIZE;
 }
+
 
 Noeud *trouver(const char *entite)
 {

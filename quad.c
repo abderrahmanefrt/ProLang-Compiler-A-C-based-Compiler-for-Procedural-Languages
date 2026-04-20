@@ -1,17 +1,11 @@
 #include "quad.h"
 
-/* ============================================================
-   VARIABLES GLOBALES
-   ============================================================ */
+
 Quad quad[1000];
 int  qc      = 0;
 int  cptTemp = 0;
 
-/* ============================================================
-   FONCTIONS DE BASE
-   ============================================================ */
 
-/* Ajoute un quadruplet (oper, op1, op2, res) dans la table */
 void ajouterQuad(char oper[], char op1[], char op2[], char res[])
 {
     if (qc >= 1000) {
@@ -25,8 +19,7 @@ void ajouterQuad(char oper[], char op1[], char op2[], char res[])
     qc++;
 }
 
-/* Met a jour une case d'un quadruplet existant (backpatching)
-   colon_quad : 0=oper  1=op1  2=op2  3=res                   */
+
 void updateQuad(int num_quad, int colon_quad, char val[])
 {
     if      (colon_quad == 0) strcpy(quad[num_quad].oper, val);
@@ -35,13 +28,12 @@ void updateQuad(int num_quad, int colon_quad, char val[])
     else if (colon_quad == 3) strcpy(quad[num_quad].res,  val);
 }
 
-/* Genere un nouveau nom de temporaire : T1, T2, T3, ... */
 void nouveauTemp(char *buf)
 {
     sprintf(buf, "T%d", ++cptTemp);
 }
 
-/* Affiche la table des quadruplets */
+
 void afficherQuads(void)
 {
     int i;
@@ -54,15 +46,7 @@ void afficherQuads(void)
     }
 }
 
-/* ============================================================
-   GESTION DES EXPRESSIONS
-   ============================================================ */
 
-/* ---- creerExpr ----
-   Alloue une fiche ExprInfo.
-   NOUVEAU : parametre cmpOp pour stocker l'operateur de saut.
-   Ex : creerExpr("integer", "T1", "BLE", 0, 1, 0, 0)
-        signifie : expression de comparaison, on saute si <=    */
 ExprInfo *creerExpr(const char *type, const char *place,
                     const char *cmpOp,
                     int isConst, int isInt, int ival, float fval)
@@ -109,10 +93,6 @@ static const char *sautInverse(const char *op)
     return "BZ";  /* par defaut */
 }
 
-/* ---- exprArith ----
-   Gere +, -, *, /
-   Emet : ( op , a , b , Tx )
-   cmpOp = "BZ" par defaut (pas une comparaison directe)       */
 ExprInfo *exprArith(ExprInfo *a, ExprInfo *b, char op)
 {
     char temp[32], opstr[4];
@@ -140,20 +120,7 @@ ExprInfo *exprArith(ExprInfo *a, ExprInfo *b, char op)
     }
 }
 
-/* ---- exprComp ----
-   NOUVEAU COMPORTEMENT :
-   Au lieu d'emettre ( > , x , y , T1 ) puis laisser BZ utiliser T1,
-   on stocke directement les operandes et le saut inverse dans la fiche.
 
-   On emet quand meme le quadruplet de comparaison pour calculer
-   le resultat 0/1 (utile pour AND/OR), ET on stocke cmpOp
-   pour que debut_if / conditionWhile puissent utiliser le
-   bon saut conditionnel.
-
-   Exemple : x > y
-     Emet     : ( >   , x , y , T1 )
-     cmpOp    : "BLE"  (saute si x <= y, c-a-d condition fausse)
-     place    : "T1"   (pour compatibilite avec AND/OR)           */
 ExprInfo *exprComp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
 {
     char temp[32];
@@ -169,15 +136,10 @@ ExprInfo *exprComp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
     /* Calcul du saut inverse */
     saut = sautInverse(opstr);
 
-    /* Emission du quadruplet de comparaison */
     nouveauTemp(temp);
     ajouterQuad((char*)opstr, a->place, b->place, temp);
 
-    /*
-       On cree une fiche avec :
-       - place  = temp  (T1, T2...) pour AND/OR
-       - cmpOp  = saut  (BLE, BGE...) pour if/while/for
-    */
+    
     r = creerExpr("integer", temp, saut, 0, 1, 0, 0.0f);
 
     /* On stocke aussi les operandes originaux dans op1/op2
@@ -217,31 +179,10 @@ ExprInfo *exprNon(ExprInfo *a)
     ajouterQuad("NON", a->place, "vide", temp);
 
     libererExpr(a);
-    /* NON(x) vaut 0 quand x != 0, donc on saute si BNZ */
     return creerExpr("integer", temp, "BNZ", 0, 1, 0, 0.0f);
 }
 
-/* ============================================================
-   GESTION DU IF
 
-   AVANT (avec BZ uniquement) :
-     ( >  , x , y , T1 )
-     ( BZ , dest , T1 , vide )   ← 2 quadruplets
-
-   APRES (avec saut direct) :
-     ( >   , x , y , T1 )
-     ( BLE , dest , x , y )      ← saut direct si x <= y (faux)
-
-   On utilise le cmpOp stocke dans la fiche de la condition
-   pour choisir le bon saut.
-   ============================================================ */
-
-/* ---- debut_if ----
-   Emet le saut conditionnel avec le bon operateur.
-   Si la condition est (x > y) → cmpOp = "BLE"
-   On emet : ( BLE , vide , x , y )
-   Si la condition est une expression logique → cmpOp = "BZ"
-   On emet : ( BZ  , vide , T1 , vide )                        */
 int debut_if(ExprInfo *cond)
 {
     int idx = qc;
@@ -300,9 +241,7 @@ void fin_if(int idx_br)
     updateQuad(idx_br, 1, tmp);
 }
 
-/* ============================================================
-   GESTION DU WHILE
-   Meme principe : on utilise le bon saut selon cmpOp           */
+
 
 int debut_while(void)
 {
@@ -337,10 +276,7 @@ void fin_while(int idx_debut, int idx_bz)
     updateQuad(idx_bz, 1, tmp);
 }
 
-/* ============================================================
-   GESTION DU FOR
-   Le test est toujours var <= limite → on utilise BGT
-   (on saute si var > limite, c-a-d condition fausse)           */
+
 
 int debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
 {
@@ -361,21 +297,11 @@ int debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
     nouveauTemp(tempCond);
     ajouterQuad("<=", (char*)var, tempLim, tempCond);
 
-    /*
-       NOUVEAU : on utilise BGT au lieu de BZ
-       On saute si var > limite (condition fausse)
-       ( BGT , vide , var , tempLim )
-       au lieu de
-       ( BZ  , vide , tempCond , vide )
-    */
+   
     idx_bz = qc;
     sprintf(tmp, "%d", idx_debut);
     ajouterQuad("BGT", tmp, (char*)var, tempLim);
-    /*
-       op1 = idx_debut (sera ecrase par backpatch)
-       op2 = var       (operande 1 du test)
-       res = tempLim   (operande 2 du test)
-    */
+   
 
     return idx_bz;
 }

@@ -1,0 +1,38 @@
+#ifndef OPTIM_H
+#define OPTIM_H
+
+#include "quad.h"
+
+/* ============================================================
+   OPTIMISATION DU CODE INTERMEDIAIRE
+   Selon le cours (SAYOUD Lynda - USTHB 2025-2026)
+
+   Les 5 optimisations implementees :
+   1. Propagation de copie
+   2. Propagation d'expression
+   3. Elimination des expressions redondantes
+   4. Simplification algebrique
+   5. Elimination de code inutile
+
+   Fonctionnement :
+   - On travaille directement sur le tableau quad[]
+   - Un quadruplet "supprime" a son oper mis a "NOP"
+   - On repasse plusieurs fois jusqu'a stabilite
+   - A la fin, afficherQuadsOptimises() affiche sans les NOP
+   ============================================================ */
+
+/* Lance toutes les optimisations en boucle jusqu'a stabilite */
+void optimiser(void);
+
+/* Affiche les quadruplets apres optimisation (sans les NOP) */
+void afficherQuadsOptimises(void);
+
+/* --- Les 5 passes individuelles ---
+   Retournent 1 si au moins un changement a ete effectue, 0 sinon */
+int propagationCopie      (void);
+int propagationExpression (void);
+int eliminationRedondantes(void);
+int simplificationAlgebrique(void);
+int eliminationCodeInutile(void);
+
+#endif
