@@ -93,7 +93,7 @@ static double extraire_reel_signe(const char *txt)
 
 DIGIT       [0-9]
 LETTER      [A-Za-z]
-IDF         {LETTER}({LETTER}|{DIGIT}|(_({LETTER}|{DIGIT})))*
+IDF   [A-Z][A-Za-z0-9_]*
 INT         {DIGIT}+
 REAL        {DIGIT}+"."{DIGIT}+
 SINT        \([ \t]*[+-][ \t]*{DIGIT}+[ \t]*\)

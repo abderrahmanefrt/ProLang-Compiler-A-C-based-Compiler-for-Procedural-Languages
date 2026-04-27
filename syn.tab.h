@@ -72,7 +72,8 @@
      mc_float = 288,
      tok_chaine = 289,
      cst_int = 290,
-     cst_reel = 291
+     cst_reel = 291,
+     UMINUS = 292
    };
 #endif
 
@@ -83,18 +84,18 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 102 "syn.y"
+#line 322 "syn.y"
 
     int   entier;
     float reel;
     char *str;
     void *expr;
-    int   idx;   /* indice de quadruplet pour backpatching */
+    int   idx;
 
 
 
 /* Line 1676 of yacc.c  */
-#line 98 "syn.tab.h"
+#line 99 "syn.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

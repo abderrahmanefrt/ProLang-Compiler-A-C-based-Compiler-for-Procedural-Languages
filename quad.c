@@ -71,10 +71,7 @@ void libererExpr(ExprInfo *e)
 }
 
 /* ============================================================
-   TABLE DE CORRESPONDANCE
-   Opérateur de comparaison  →  saut conditionnel inverse
-   On saute quand la condition est FAUSSE, donc on prend
-   l'operateur inverse :
+  
      x > y  est faux  quand x <= y  → BLE
      x < y  est faux  quand x >= y  → BGE
      x >= y est faux  quand x <  y  → BLT
@@ -133,7 +130,6 @@ ExprInfo *exprComp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
         return creerExpr("integer", "", "BZ", 0, 1, 0, 0.0f);
     }
 
-    /* Calcul du saut inverse */
     saut = sautInverse(opstr);
 
     nouveauTemp(temp);
@@ -142,15 +138,14 @@ ExprInfo *exprComp(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
     
     r = creerExpr("integer", temp, saut, 0, 1, 0, 0.0f);
 
-    /* On stocke aussi les operandes originaux dans op1/op2
-       du dernier quad pour que les sauts directs soient possibles */
+    
 
     libererExpr(a); libererExpr(b);
     return r;
 }
 
-/* ---- exprLogique ----
-   AND / OR : pas de saut special, on utilise BZ par defaut     */
+/*
+   AND / OR */
 ExprInfo *exprLogique(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
 {
     char temp[32];
@@ -168,8 +163,7 @@ ExprInfo *exprLogique(ExprInfo *a, ExprInfo *b, const char *opstr, int code)
     return creerExpr("integer", temp, "BZ", 0, 1, 0, 0.0f);
 }
 
-/* ---- exprNon ----
-   NON(a) : si a est vrai (!=0) → resultat = 0, donc BNZ       */
+
 ExprInfo *exprNon(ExprInfo *a)
 {
     char temp[32];
@@ -187,31 +181,22 @@ int debut_if(ExprInfo *cond)
 {
     int idx = qc;
 
-    /* On recupere le dernier quad emis pour connaitre op1/op2 */
-    /* quad[qc-1] contient ( > , x , y , T1 ) */
+   
     char op1_cond[64], op2_cond[64];
-    strcpy(op1_cond, quad[qc-1].op1);  /* = x  */
-    strcpy(op2_cond, quad[qc-1].op2);  /* = y  */
+    strcpy(op1_cond, quad[qc-1].op1);  
+    strcpy(op2_cond, quad[qc-1].op2);  
 
-    /*
-       Si le cmpOp est un saut direct (BLE, BGE, BGT, BLT, BNZ)
-       on peut faire un saut direct sur les operandes originaux.
-       Sinon (BZ : cas AND/OR ou expression simple) on utilise
-       le temporaire.
-    */
+    
     if (strcmp(cond->cmpOp, "BZ") == 0) {
-        /* Cas AND/OR ou expression simple : ( BZ , vide , T1 , vide ) */
         ajouterQuad("BZ", "vide", cond->place, "vide");
     } else {
-        /* Cas comparaison directe : ( BLE , vide , x , y ) */
         ajouterQuad(cond->cmpOp, "vide", op1_cond, op2_cond);
     }
 
     return idx;
 }
 
-/* ---- partie_else ----
-   Emet BR, backpatch le saut conditionnel (BZ/BLE/...)         */
+
 int partie_else(int idx_bz)
 {
     int idx_br = qc;
@@ -225,7 +210,6 @@ int partie_else(int idx_bz)
     return idx_br;
 }
 
-/* ---- fin_if_sans_else ---- */
 void fin_if_sans_else(int idx_bz)
 {
     char tmp[20];
@@ -233,7 +217,6 @@ void fin_if_sans_else(int idx_bz)
     updateQuad(idx_bz, 1, tmp);
 }
 
-/* ---- fin_if ---- */
 void fin_if(int idx_br)
 {
     char tmp[20];
@@ -283,17 +266,16 @@ int debut_for(const char *var, ExprInfo *init, ExprInfo *lim)
     char tempLim[32], tempCond[32], tmp[20];
     int  idx_debut, idx_bz;
 
-    /* QUAD 1 : initialisation */
+    
     ajouterQuad(":=", init->place, "vide", (char*)var);
 
-    /* QUAD 2 : sauvegarde limite */
     nouveauTemp(tempLim);
     ajouterQuad(":=", lim->place, "vide", tempLim);
 
-    /* Debut du test */
+   
     idx_debut = qc;
 
-    /* QUAD 3 : test var <= limite */
+    
     nouveauTemp(tempCond);
     ajouterQuad("<=", (char*)var, tempLim, tempCond);
 
@@ -311,19 +293,19 @@ void fin_for(int idx_bz, const char *var)
     char tempIncr[32], tmp[20];
     int  idx_debut;
 
-    /* Recuperer idx_debut depuis op1 du BGT */
+    
     idx_debut = atoi(quad[idx_bz].op1);
 
-    /* Incrementation */
+    
     nouveauTemp(tempIncr);
     ajouterQuad("+",  (char*)var, "1",     tempIncr);
     ajouterQuad(":=", tempIncr,  "vide",   (char*)var);
 
-    /* Retour au test */
+    
     sprintf(tmp, "%d", idx_debut);
     ajouterQuad("BR", tmp, "vide", "vide");
 
-    /* Backpatch du BGT */
+   
     sprintf(tmp, "%d", qc);
     updateQuad(idx_bz, 1, tmp);
 }

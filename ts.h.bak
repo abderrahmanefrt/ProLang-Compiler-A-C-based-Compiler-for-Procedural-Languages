@@ -61,7 +61,7 @@ unsigned int hacher(const char *s)
         return 0;
 
     while (*s) {
-        h = (h * 33) + (unsigned char)(*s);
+        h = ((h << 5) + h) + (unsigned char)(*s);
         s++;
     }
 

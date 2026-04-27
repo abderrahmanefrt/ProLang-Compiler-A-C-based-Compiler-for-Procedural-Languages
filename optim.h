@@ -3,16 +3,13 @@
 
 #include "quad.h"
 
-
-
-void optimiser(void);
-
-void afficherQuadsOptimises(void);
-
-int propagationCopie      (void);
-int propagationExpression (void);
+int propagationCopie(void);
+int propagationExpression(void);
 int eliminationRedondantes(void);
 int simplificationAlgebrique(void);
 int eliminationCodeInutile(void);
+
+void optimiserQuadruplets(void);
+void afficherQuadsOptimises(void);
 
 #endif
